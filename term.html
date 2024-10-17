@@ -1,0 +1,357 @@
+<!doctype html>
+<html>
+<head>
+    <link href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-webgl@0.16.0/lib/xterm-addon-webgl.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+    <style>
+        html, body {
+            height: 100vh;
+            margin: 0;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .top {
+            height: 55px; /* Fixed height for the top row */
+            background-color: lightgray;
+        }
+
+        .bottom {
+            flex-grow: 1; /* Bottom row fills remaining space */
+            background-color: black
+        }
+
+        #terminal{
+            width: 100%;
+            height: 99.9%;
+        }
+    </style>
+</head>
+<body>
+    <div class="top">
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+        <button id="reload-page">Reload Page</button>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+        WebGL: <span id="gl-status">Enabled</span> - 
+        <button id="gl-enable">Enable</button>
+        <button id="gl-disable">Disable</button>
+        <button id="gl-reload">Reload</button>
+        <button id="gl-clratlas">Clear Atlas</button>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+        <button id="animation1">Animation 1</button>
+        <button id="animation2">Animation 2</button>
+        
+        <button id="animation-pause">Pause Animation</button>
+        <button id="animation-unpause">Unpause Animation</button>
+    </div>
+    <div class="bottom">
+        <div id="terminal"></div>
+    </div>        
+
+    <script>
+        let term = new Terminal({
+            fontFamily: 'monospace',
+        });
+
+        let addon = new WebglAddon.WebglAddon();
+        addon.onContextLoss((e) => {
+            addon.dispose();
+        });
+        term.loadAddon(addon);
+
+        const fitAddon = new FitAddon.FitAddon();
+        term.loadAddon(fitAddon);
+
+        term.open(document.getElementById('terminal'));
+
+        term.onData((input_data) => {
+            if (input_data == "\r"){
+                term.writeln(input_data);
+            }else{
+                term.write(input_data);
+            }
+        });
+
+        fitAddon.fit();
+
+        const matrixChars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        
+        let animationTimer = null;
+
+        let columns = term.cols;
+        let rows = term.rows;
+        let matrix = [];
+
+        let curAnimation = 'matrix';
+
+        const colors = [
+            '\x1b[31m', // red
+            '\x1b[32m', // green
+            '\x1b[33m', // yellow
+            '\x1b[34m', // blue
+            '\x1b[35m', // magenta
+            '\x1b[36m', // cyan
+            '\x1b[37m', // white
+        ];
+        
+        const loremIpsumWords = [
+            "Lorem", "ipsum", "dolor", "sit", "amet", "consectetur", "adipiscing", "elit", 
+            "sed", "do", "eiusmod", "tempor", "incididunt", "ut", "labore", "et", "dolore", 
+            "magna", "aliqua", "Ut", "enim", "ad", "minim", "veniam"
+        ];
+
+        document.getElementById("reload-page").onclick = (()=>{
+            window.location.reload();
+            window.location.reload(true);
+        })
+
+        document.getElementById("gl-enable").onclick = (()=>{
+            loadGl();
+        })
+
+        document.getElementById("gl-disable").onclick = (()=>{
+            document.getElementById("gl-status").innerText = "Disabled"
+            if (addon){
+                addon.dispose();
+                addon = null;
+            }            
+        })
+
+        document.getElementById("gl-reload").onclick = (()=>{
+            document.getElementById("gl-status").innerText = "Disabled"
+            requestAnimationFrame(() => {});
+            loadGl();
+        })
+
+        document.getElementById("gl-clratlas").onclick = (()=>{
+            if (addon) {
+                addon.clearTextureAtlas();
+            }
+        })
+
+        document.getElementById("animation-pause").onclick = (()=>{
+            if (animationTimer) {
+                clearInterval(animationTimer);
+                animationTimer = null;
+            }
+        })
+
+        document.getElementById("animation-unpause").onclick = (()=>{
+            if (animationTimer) {
+                clearInterval(animationTimer);
+                animationTimer = null;
+            }
+            runAnimation()
+        })
+
+        document.getElementById("animation1").onclick = (()=>{
+            if (animationTimer) {
+                clearInterval(animationTimer);
+                animationTimer = null;
+            }
+            term.reset();
+            curAnimation = 'matrix';
+            setupAnimation();
+        })
+
+        document.getElementById("animation2").onclick = (()=>{
+            if (animationTimer) {
+                clearInterval(animationTimer);
+                animationTimer = null;
+            }
+            term.reset();
+            curAnimation = 'lorips';
+            setupAnimation();
+        })
+
+        function loadGl(){
+            if (addon){
+                addon.dispose();
+                addon = null;
+            }
+            addon = new WebglAddon.WebglAddon();
+            addon.onContextLoss((e) => {
+                addon.dispose();
+            });
+            term.loadAddon(addon);            
+            document.getElementById("gl-status").innerText = "Enabled"
+        }
+
+        function setupAnimation(){
+            if (animationTimer) {
+                clearInterval(animationTimer);
+                animationTimer = null;
+            }
+
+            switch (curAnimation){
+                case "matrix":
+                    setupMatrixRain();
+                    break;
+                case "lorips":
+                    runAnimation();
+                    break;
+                case "input":
+                    break;
+            }
+        }
+        
+        function runAnimation(){
+            switch (curAnimation){
+                case "matrix":
+                    animationTimer = setInterval(matrixRain, 50);
+                    break;
+                case "lorips":
+                    animationTimer = setInterval(printRandomLoremIpsum, 500);
+                    break;
+                case "input":
+                    break;
+            }
+        }
+
+        function randomLoremIpsum() {
+            let randomText = '';
+            
+            // Generate a sentence with random number of words
+            const wordCount = Math.floor(Math.random() * 10) + 5;
+            
+            for (let i = 0; i < wordCount; i++) {
+                const word = loremIpsumWords[Math.floor(Math.random() * loremIpsumWords.length)];
+                const color = colors[Math.floor(Math.random() * colors.length)];
+                randomText += color + word + ' '; // Append colored word
+            }
+            
+            return randomText + '\x1b[0m'; // Reset color at the end
+        }
+
+        function printRandomLoremIpsum() {
+            const coloredLorem = randomLoremIpsum();
+            term.write(coloredLorem + '\r\n');
+        }
+
+        function setupMatrixRain() {
+            term.reset();
+
+            if (animationTimer) {
+                clearInterval(animationTimer);
+                animationTimer = null;
+            }
+            
+            columns = term.cols;
+            rows = term.rows;            
+
+
+            matrix = [];
+            for (let i = 0; i < columns; i++) {
+                matrix[i] = {
+                    pos: Math.random() * rows,
+                    speed: Math.random() * 1.5 + 0.05,  // Random falling speed
+                    trailLength: Math.floor(Math.random() * 10 + 10),  // Random trail length
+                    trail: [] // To track positions and chars in the trail
+                };
+            }
+
+            runAnimation();
+        }
+
+        function matrixRain() {
+            for (let i = 0; i < columns; i++) {
+                let currentCol = matrix[i];
+
+                // Move the trail down
+                for (let j = currentCol.trail.length - 1; j >= 0; j--) {
+                    let charPos = currentCol.trail[j].pos;
+
+                    // Clear the old tail (by writing a space at the old position)
+                    if (j === currentCol.trail.length - 1 && charPos >= 0 && charPos < rows) {
+                        term.write(`\x1b[${charPos + 1};${i + 1}H `);  // Clear the last character in the trail
+                    }
+
+                    // Move the character down in the trail
+                    if (j > 0) {
+                        currentCol.trail[j].pos = currentCol.trail[j - 1].pos;
+                    } else {
+                        currentCol.trail[j].pos = Math.floor(currentCol.pos);
+                    }
+
+                    // Draw the character at the new position
+                    let fadeFactor;
+                    // Fade in for the first half of the trail, then fade out for the second half
+                    if (j <= currentCol.trailLength / 2) {
+                        fadeFactor = j / (currentCol.trailLength / 2);  // Fade in for the first half
+                    } else {
+                        fadeFactor = 1 - ((j - currentCol.trailLength / 2) / (currentCol.trailLength / 2));  // Fade out for the second half
+                    }
+
+                    let brightness;
+
+                    // Apply brightness based on the fade factor
+                    if (fadeFactor > 0.75) {
+                        brightness = '92';  // Brightest
+                    } else if (fadeFactor > 0.5) {
+                        brightness = '32';  // Dimmer
+                    } else if (fadeFactor > 0.25) {
+                        brightness = '2';   // Almost faded
+                    } else {
+                        brightness = '0';   // Fully faded (will be cleared shortly)
+                    }
+
+                    if (currentCol.trail[j].pos >= 0 && currentCol.trail[j].pos < rows) {
+                        let charPos = currentCol.trail[j].pos;
+                        let currentChar = currentCol.trail[j].char;
+
+                        // Only draw the character if not fully faded (brightness != 0)
+                        if (brightness !== '0') {
+                            term.write(`\x1b[38;5;2m\x1b[${brightness}m\x1b[${charPos + 1};${i + 1}H${currentChar}`);
+                        } else {
+                            // Clear this position (completely faded out)
+                            term.write(`\x1b[${charPos + 1};${i + 1}H `);
+                        }
+                    }
+                }
+
+                // Update the position of the column's head (falling effect)
+                currentCol.pos += currentCol.speed;
+
+                // Add a new character to the trail
+                if (currentCol.trail.length < currentCol.trailLength) {
+                    currentCol.trail.unshift({
+                        pos: Math.floor(currentCol.pos),
+                        char: matrixChars.charAt(Math.floor(Math.random() * matrixChars.length))
+                    });
+                }
+
+                // Remove characters from the tail of the trail if necessary
+                if (currentCol.trail.length > currentCol.trailLength) {
+                    currentCol.trail.pop();
+                }
+
+                // Reset the position once it goes beyond the terminal height
+                if (currentCol.pos >= rows) {
+                    currentCol.pos = 0;
+                }
+            }
+
+            term.write('\x1b[0m'); // Reset text formatting at the end of each iteration
+        }
+
+        const xterm_resize_ob = new ResizeObserver(function (entries) {
+            try {
+                fitAddon && fitAddon.fit();
+                setupAnimation();
+            } catch (err) {
+                console.log(err);
+            }
+        });
+        
+        xterm_resize_ob.observe(document.querySelector("#terminal"));
+
+        setupAnimation();
+
+    </script>
+</body>
+</html>
